@@ -1,218 +1,138 @@
-# YouTube KOL Workflow → Feishu/Lark Bitable
+# YouTube 网红开发工作流系统（KOL Workflow → 飞书）
 
-> Search YouTube influencers by product keywords, filter and score them, sync to Feishu/Lark Bitable for team collaboration.
-
-[中文说明](#中文说明) | [English](#overview)
-
-> 🤖 **New to coding? Install & run everything with an AI assistant:**
-> - [Install with AI — English Guide](INSTALL_WITH_AI_EN.md)
-> - [用 AI 安装使用 — 中文教程](INSTALL_WITH_AI_CN.md)
-
-## ⚙️ Configuration after clone
-
-```bash
-cp assets/yt-kol-workflow/.env.example assets/yt-kol-workflow/.env
-# then edit .env:
-#   YOUTUBE_API_KEY      = your YouTube Data API v3 key (required)
-#   FEISHU_AUTH_MODE     = auto (default) | cli | app
-#   FEISHU_BASE_TOKEN    = your Feishu Base token (main KOL Base)
-#   FEISHU_BASE_TOKEN_CFC1 = optional second Base (product line B)
-#   FEISHU_APP_ID / FEISHU_APP_SECRET = only needed in "app" auth mode
-```
-
-> 🔒 **No real credentials are stored in this repository.** All Feishu Base
-> tokens and app secrets are read from environment variables / `.env` at
-> runtime (scripts fall back to `os.environ.get("FEISHU_BASE_TOKEN", "")`).
-> Never commit your real `.env`, `config.json`, `local_cache/`, `output/`, or
-> any downloaded batch data (`.gitignore` already blocks these).
-
-## Overview
-
-
-This workflow helps you discover YouTube influencers (KOLs) relevant to your product, automatically detect their Amazon promotion experience and contact emails, score them by product fit, and sync everything into a Feishu/Lark Bitable for your team to filter, sort, and reach out.
-
-### Key Features
-
-- **Batch YouTube Search**: Search multiple keywords at once, filter by views/subscribers/engagement
-- **Channel Deduplication**: Cross-batch deduplication by Channel ID
-- **Amazon Promo Detection**: Automatically classify influencers' Amazon promotion experience:
-  - `Amazon Storefront` (highest value - Amazon Influencer Program member)
-  - `Amazon Affiliate` (Associate with `?tag=` links)
-  - `Amazon Links` (has amzn.to/a.co/amazon links)
-  - `Other Affiliate` (geni.us/LTK/ShopMy)
-  - `Sponsored` (#ad/paid promotion)
-  - `Not Found`
-- **Email Extraction**: Multi-source email extraction (channel description + video descriptions), ranked by cross-video frequency
-- **Product-Fit Scoring**: Score influencers S/A/B/C based on content relevance, promo experience, engagement, and activity
-- **Feishu/Lark Sync**: One-command sync to your own Feishu Base (you own all data, fields, and views)
-- **Local Cache**: JSON cache for fast offline analysis (2700x faster than API pagination)
-
-### Architecture
-
-```
-YouTube Search (main.py batch)
-   └─> output/<timestamp>_batch/  local Excel (per-keyword files)
-         └─> merge-output          merge & dedup → kol_summary_tables.xlsx (4 sheets)
-               └─> Feishu Sync      clear + rewrite 4 tables → your editable Base
-                     └─> Enrich      refresh_promo_lark.py (promo+email) + score_influencers.py (scoring)
-                           └─> Derive   sync_hongren_table.py (incremental summary, no table reset) + export_local_cache.py (cache)
-```
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.9+
-- [lark-cli](https://github.com/larksuite/lark-cli) (for Feishu sync, optional)
-- YouTube Data API v3 key
-
-### Installation
-
-```bash
-git clone https://github.com/yourusername/yt-kol-workflow.git
-cd yt-kol-workflow/assets/yt-kol-workflow
-
-# Create venv and install dependencies
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-# Configure environment
-cp .env.example .env
-# Edit .env: fill in YOUTUBE_API_KEY
-```
-
-### Usage
-
-```bash
-# 1. Create a keywords file (one keyword per line, optionally with count: keyword,100)
-echo "baby car camera\nbaby monitor car\nrear facing car seat" > keywords.txt
-
-# 2. Run batch search
-python main.py batch --keywords-file keywords.txt -o output/my_batch --region US --lang en
-
-# 3. Merge batches (dedup by Channel ID)
-python main.py merge-output output/my_batch -o output/summary/kol_summary_tables.xlsx
-
-# 4. Sync to Feishu (first time: creates Base + tables)
-python sync_to_user_base.py
-# Subsequent syncs (clear + rewrite):
-python write_user_base.py
-
-# 5. Enrich: detect Amazon promo experience + extract emails
-python refresh_promo_lark.py
-
-# 6. Score: product-fit scoring (S/A/B/C)
-python score_influencers.py
-
-# 7. Incremental-sync summary table + export local cache (since 2026-09, replaces build_hongren_table.py)
-python sync_hongren_table.py --dedupe
-python export_local_cache.py
-```
-
-### Product Profile Configuration
-
-Edit `product_profiles.json` to define your product:
-
-```json
-{
-  "active": "my_product",
-  "profiles": {
-    "my_product": {
-      "name": "My Product",
-      "keywords": ["keyword1", "keyword2"],
-      "markets": ["US"],
-      "min_views": 10000,
-      "min_engagement": 2.0
-    }
-  }
-}
-```
-
-## Project Structure
-
-```
-yt-kol-workflow/
-├── assets/yt-kol-workflow/
-│   ├── main.py                  # Search / merge / sync entry point
-│   ├── write_user_base.py       # Feishu sync (clear + rewrite)
-│   ├── sync_to_user_base.py     # First-time Base creation
-│   ├── refresh_promo_lark.py    # Promo detection + email extraction
-│   ├── score_influencers.py     # Product-fit scoring (S/A/B/C)
-│   ├── sync_hongren_table.py    # Incremental summary sync (preserves manual columns, --dedupe)
-│   ├── export_local_cache.py    # Export to local JSON cache
-│   ├── local_cache_reader.py    # Fast local cache reader
-│   ├── product_profiles.json    # Product profile config
-│   ├── config.py                # Configuration
-│   ├── youtube/                 # YouTube API client modules
-│   ├── feishu/                  # Feishu/Lark API modules
-│   ├── filter/                  # Filtering, scoring, email, promo detection
-│   ├── workflow/                # Workflow phases (search, filter, enrich)
-│   ├── export/                  # Excel export modules
-│   ├── tests/                   # Test suite
-│   └── requirements.txt
-├── SKILL.md                     # Skill definition
-├── 使用说明与注意事项.md          # User guide (Chinese)
-└── README.md
-```
-
-## Scoring System
-
-| Level | Meaning |
-|-------|---------|
-| **S** | Perfect match + Amazon Storefront/Affiliate + has email + active |
-| **A** | Good match + Amazon promo experience + has email |
-| **B** | Some match or has promo/email but not both |
-| **C** | Low relevance, no promo experience, no email |
-
-## Important Notes
-
-- `write_user_base.py` **clears and rewrites** all records. Manual field edits in Feishu are preserved, but per-record values will be overwritten on sync.
-- The promo detection and email extraction scripts require YouTube API access (consume quota: ~2 units per channel).
-- For large datasets (>20K rows in influencer_videos), the Feishu table has a record limit. Use local cache for analysis.
-- Set `HTTPS_PROXY` environment variable if YouTube API is blocked in your region.
-
-## License
-
-See [LICENSE](assets/yt-kol-workflow/LICENSE).
+> 用产品关键词在 YouTube 上自动搜网红 → 筛频道/视频 → 打分定优先级 → 同步到飞书多维表格，
+> 让团队在一个共享 Base 里完成「找红人 → 评估 → 联系 → 跟进」的全流程。
+>
+> 本 README 面向**使用者**（怎么看表、怎么筛红人、各列含义）。技术细节 / 命令 / 踩坑见技术文档（见文末「文档结构」）。
 
 ---
 
-## 中文说明
+## 1. 这个系统是干什么的？
 
-YouTube 网红搜索工作流：用关键词在 YouTube 搜索网红 → 过滤筛选 → 检测亚马逊推广经验和邮箱 → 按产品匹配度评分 → 同步到飞书多维表格。
+输入**产品关键词**（如 `baby car camera`、`soccer gear for kids`），系统自动完成：
 
-### 核心功能
-
-- 批量关键词搜索，按播放量/订阅数/互动率过滤
-- 跨批次按 Channel ID 去重
-- 自动检测亚马逊推广经验（6 级分类）
-- 多源邮箱抽取（频道简介 + 视频描述，按频次排序）
-- 产品匹配度评分（S/A/B/C 优先级）
-- 一键同步飞书多维表格
-- 本地 JSON 缓存（秒级读取，比 API 快 2700 倍）
-
-### 快速开始
-
-```bash
-# 1. 克隆并安装
-git clone https://github.com/yourusername/yt-kol-workflow.git
-cd yt-kol-workflow/assets/yt-kol-workflow
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-
-# 2. 配置
-cp .env.example .env
-# 编辑 .env 填入 YOUTUBE_API_KEY
-
-# 3. 搜索 → 合并 → 同步 → 补算 → 评分
-python main.py batch --keywords-file keywords.txt -o output/my_batch
-python main.py merge-output output/my_batch -o output/summary/kol_summary_tables.xlsx
-python sync_to_user_base.py        # 首次建表
-python refresh_promo_lark.py       # 补算 promo + 邮箱
-python score_influencers.py        # 评分写回
-python sync_hongren_table.py --dedupe  # 增量同步红人表（9/3 起取代 build_hongren_table.py 删表重建）
-python export_local_cache.py       # 导出本地缓存
+```
+YouTube 搜索 (按关键词) → 频道筛选 → 红人评分(0-100 + S/A/B/C) → 同步飞书 Base → 派生「红人表」精简视图
 ```
 
-详细使用说明见 [使用说明与注意事项.md](使用说明与注意事项.md)。
+每个红人自动标注：
+- 匹配的产品线 + **品牌匹配度(0-100)** + **开发优先级(S/A/B/C)**
+- 有没有推广过亚马逊产品（及 6 级明细，见 §5）
+- 商务联系邮箱（能在频道简介/视频描述里找到的话）
+- 来源关键词（当初是搜哪个词找到他的）、代表视频互动率、频道是否断更等
+
+当前主库约 **1800+ 红人**，可按产品线、优先级、邮箱、亚马逊经验任意组合筛选，直接开始联系。
+
+---
+
+## 2. 快速开始（跑新搜索）
+
+> 完整技术流程与全部命令见 `SKILL.md`（或 skill 包 `yt-kol-feishu-sync`），这里给最小步骤。
+
+**准备（只需一次）**：在 `assets/yt-kol-workflow/.env` 里填 `YOUTUBE_API_KEY`（复制 `.env.example` 改）。
+
+**要搜新关键词 / 换产品线时**，告诉 AI（或按 SKILL.md 手动跑）：
+1. 搜什么关键词、每词搜多少个
+2. 用哪个产品画像评分（见 §7）
+3. AI 自动执行：搜索 → 合并去重 → 同步飞书 → 补算推广经验/邮箱 → 评分 → 更新红人表
+
+> ⚠️ 搜索走 YouTube API 需翻墙，每个关键词约 2-3 分钟；补算推广经验需逐个频道抓视频描述，500 个频道约 30 分钟（支持断点续传，中断重跑即可）。
+
+---
+
+## 3. 飞书表怎么打开
+
+飞书 Base（团队内部共享，token 见团队配置 / `.env` 的 `FEISHU_BASE_TOKEN`）打开后有以下表：
+
+| 表名 | 里面是什么 | 主要看哪张 |
+|---|---|---|
+| **红人表** | 精简版，核心信息都在 | **✅ 主要看这张** |
+| 网红详情表 | 完整版（主库），所有字段 | 需要查详情时看 |
+| 网红视频表 | 每个红人的视频列表 | 查具体视频时看 |
+| 视频数据表 | 搜索到的视频原始数据 | 一般不用看 |
+| 搜索任务表 | 每次搜索的记录 | 一般不用看 |
+
+> 红人表是主库的**派生精简表**：`sync-workbook` 同步主库后会自动增量更新它；
+> 你在表里手填的跟进记录（备注/开发状态等）会被保护，不会因重新同步而丢失。
+
+---
+
+## 4. 红人表的列含义
+
+| 列名 | 含义 | 怎么用 |
+|---|---|---|
+| **开发优先级** | S/A/B/C 四档 | **最重要**。优先联系 A/B 档 |
+| **匹配产品** | 该红人被归到哪条产品线 | 按产品线筛选 |
+| **品牌匹配度** | 与产品内容契合度(0-100) | 越高越匹配 |
+| **内容契合类型** | 评测/开箱/使用体验/种草等 | 判断内容形式 |
+| **来源关键词** | 用哪个搜索词找到的 | 了解人群来源 |
+| **Channel Name / 频道URL** | 频道名与主页 | 点击直达频道 |
+| **订阅数** | 粉丝数（千分位） | 仅区分 KOL/KOC，**本身不加分** |
+| **代表视频互动率** | 代表视频互动率(%) | 越高粉丝越活跃、越可能真人粉 |
+| **亚马逊推广经验** | 有没有推过亚马逊（6 级） | **关键筛选条件**，见 §5 |
+| **联系邮箱** | 商务邮箱 | 有邮箱的直接联系 |
+| **推荐理由** | 为什么给这个评级 | 一句话说明 |
+| **国家/地区** | 红人所在地区 | 按目标市场筛选 |
+| **断更评估 / 频道初步判断** | 是否停更、领域/内容方向 | 快速了解定位 |
+| **备注 / 开发状态 / 开发负责人** | 手动填写 | 记录跟进进度（同步会保护） |
+
+---
+
+## 5. 「亚马逊推广经验」列详解（6 级）
+
+系统从红人最近 25 条视频描述自动分析，分 6 级：
+
+| 级别 | 含义 | 价值 |
+|---|---|---|
+| **Amazon Storefront** | 已加入 Amazon Influencer Program，有自己 Amazon 店铺页 | **最高**：最懂亚马逊推广、好沟通、报价通常固定 |
+| **Amazon 联盟客** | 视频挂过 Amazon 联盟链接（带 `?tag=`） | **很高**：懂变现，可直接谈 CPS 联盟合作 |
+| **挂过 Amazon 链接** | 挂过 amzn.to 等亚马逊短链 | **较高**：有亚马逊推广意识 |
+| **其他联盟带货** | 用过 geni.us / LTK / ShopMy 等 | 中等：有带货经验，可引导转 Amazon 联盟 |
+| **接过赞助** | 视频有 #ad / paid promotion 声明 | 中等：接过商单懂合作流程 |
+| **未发现** | 没找到亚马逊/联盟推广痕迹 | 可联系但需从零沟通 |
+
+---
+
+## 6. 怎么筛红人开始联系（推荐操作）
+
+在飞书「红人表」里：
+
+1. **先按产品线筛**：点「匹配产品」筛选，勾选当前要推的产品。
+2. **筛 A/B 档 + 有邮箱**：勾选「开发优先级」的 A 和 B，再筛「联系邮箱」不为空。
+3. **优先联系有亚马逊经验的**：按「亚马逊推广经验」排序，优先 Storefront / 联盟客。
+4. **看推荐理由**：每个红人「推荐理由」有一句话评级说明。
+5. **记录进度**：在「备注 / 开发状态」手填（如"已发邮件"）；**这些列同步时受保护，不会丢**。
+
+---
+
+## 7. 产品画像与评分口径
+
+系统按 `assets/yt-kol-workflow/product_profiles.json` 中的画像评分：
+
+- **品牌匹配度(0-100)**：视频标题/Tags/描述命中产品关键词 + 是否做过相关产品内容。
+- **开发优先级(S/A/B/C)**：亚马逊经验 + 有没有邮箱 + 代表视频互动率 + 频道是否持续更新。
+- **订阅数只分 KOL/KOC，不加分**；粉丝质量看互动率。
+- 已配置画像示例：婴儿车载摄像头（US/DE）、足球护膝(18 岁以下)、AirTag 护照包、Mac mini 扩展坞、Apple 生态配件等。
+- 需要给某批红人换产品评分时，告诉 AI 用哪个画像**定向重算**（只改评分列，不动跟进记录）。
+
+> 评分低不代表红人差——泛关键词（如搜 `soccer` 而非 `shin guards`）搜到的人相关度天然偏低。
+> 把 A/B 档当优先池，逐个看视频内容再决定联系谁。
+
+---
+
+## 8. 数据与隐私
+
+- 代码里**不含任何真实密钥/Base token**，全部从 `.env` / 环境变量读取（模板见 `assets/yt-kol-workflow/.env.example`）。
+- 真实红人数据、批次 Excel、日志、本地缓存**不提交**到仓库（`.gitignore` 已拦 `output/`、`local_cache/`、`*.xlsx/csv/log` 等）。
+- 更早版本的说明 / 历史交接文档保留在项目根 `archive/`（仅供参考，内容可能过时）。
+
+---
+
+## 9. 文档结构（就两份，别找混）
+
+| 文档 | 读者 | 内容 |
+|---|---|---|
+| **本文件 README.md** | 人（团队使用者） | 项目介绍 + 怎么用 + 怎么筛红人 + 列含义（就是你现在看的） |
+| **SKILL.md**（skill 包 `yt-kol-feishu-sync`） | AI / 技术 | 全部命令、技术流程、lark-cli 用法、飞书字段坑、表 ID 映射、踩坑清单 |
+
+> 历史遗留：项目根曾有 SKILL.md 旧版、多份"使用说明/交接文档"，已归档至 `archive/`，无需再看。
