@@ -120,7 +120,7 @@ python scripts/bootstrap_workflow.py --target ./yt-kol-workflow --install-deps
 安装完成后，AI 会提示你配置 API Key。把以下提示词给 AI：
 
 ```
-请帮我编辑 .env 文件，将 YOUTUBE_API_KEY 的值设置为：AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+请帮我编辑 .env 文件，将 YOUTUBE_API_KEY 的值设置为：<YOUR_YOUTUBE_API_KEY>
 
 （请把上面这串替换成你真实的 API Key）
 

@@ -266,7 +266,7 @@ sys.modules["dotenv"] = _m
 同时需覆盖 `wb.LARK` 为真实路径（见标准工作流的环境前置）。`sync_hongren_table.py` 已内置以上 stub + LARK 覆盖，可直接 `python sync_hongren_table.py`。
 
 ⚠️ **`export_local_cache.py` 的 EXTRA_TABLES 仍引用已删除的足球评分表**
-`soccer_scores`（tble06acWNOPB6vX）——全量导出会因该表不存在而报错。**只导出存在的表**
+`soccer_scores`（tbl<SOCCER_SCORES>）——全量导出会因该表不存在而报错。**只导出存在的表**
 （influencers / hongren / videos / channel_videos / search_tasks），或先删掉 EXTRA_TABLES 里的 soccer_scores 行。
 
 ### 读取（后续脚本优先用本地缓存）
@@ -304,7 +304,7 @@ vmap = video_map_by_channel()       # {channel_id: [video_dict, ...]}
 ```
 
 核心特性：
-- **不删表、不重建 → table_id 永久固定**（`tblPKFENcpk8xnZH`），飞书链接/视图不失效
+- **不删表、不重建 → table_id 永久固定**（`tbl<HONGREN>`），飞书链接/视图不失效
 - 按 Channel ID 做增量 upsert（读主表网红详情表全量 → 对比 → 只写有差异的）
 - **保护人工维护列** `MANUAL_COLS = {备注, 开发状态, 联系邮箱, 开发负责人, 开发优先级}`：
   红人表已有值时不被主表覆盖（否则 103 条"已联系"会被回退成"待联系"）

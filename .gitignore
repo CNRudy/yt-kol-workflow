@@ -263,3 +263,7 @@ config.json
 *.csv
 *.log
 .DS_Store
+
+# ---- 一次性脚本归档（不入公开仓库） ----
+_archive/
+**/_archive/

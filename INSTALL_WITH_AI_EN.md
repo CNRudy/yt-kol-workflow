@@ -120,7 +120,7 @@ Please help me:
 After installation, configure your API key. Paste this to your AI:
 
 ```
-Please edit the .env file and set YOUTUBE_API_KEY to: AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+Please edit the .env file and set YOUTUBE_API_KEY to: <YOUR_YOUTUBE_API_KEY>
 
 (Replace the above with your real API key)
 
